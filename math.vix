@@ -1,0 +1,68 @@
+extern "C" {
+    //套壳这一块
+    fn sin(x: double) -> double
+    fn cos(x: double) -> double
+    fn tan(x: double) -> double
+    fn asin(x: double) -> double
+    fn acos(x: double) -> double
+    fn atan(x: double) -> double
+    fn atan2(y: double, x: double) -> double
+    fn exp(x: double) -> double
+    fn log(x: double) -> double      
+    fn log10(x: double) -> double   
+    fn pow(x: double, y: double) -> double
+    fn sqrt(x: double) -> double
+    fn fabs(x: double) -> double     
+    fn floor(x: double) -> double
+    fn ceil(x: double) -> double
+    fn fmod(x: double, y: double) -> double
+}
+
+pub fn sin(x: double) -> double {
+    return sin(x)
+}
+pub fn cos(x: double) -> double {
+    return cos(x)
+}
+pub fn tan(x: double) -> double {
+    return tan(x)
+}
+pub fn asin(x: double) -> double {
+    return asin(x)
+}
+pub fn acos(x: double) -> double {
+    return acos(x)
+}
+pub fn atan(x: double) -> double {
+    return atan(x)
+}
+pub fn atan2(y: double, x: double) -> double {
+    return atan2(y, x)
+}
+pub fn exp(x: double) -> double {
+    return exp(x)
+}
+pub fn log(x: double) -> double {
+    return log(x)
+}
+pub fn log10(x: double) -> double {
+    return log10(x)
+}
+pub fn pow(x: double, y: double) -> double {
+    return pow(x, y)
+}
+pub fn sqrt(x: double) -> double {
+    return sqrt(x)
+}
+pub fn fabs(x: double) -> double {
+    return fabs(x)
+}
+pub fn floor(x: double) -> double {
+    return floor(x)
+}
+pub fn ceil(x: double) -> double {
+    return ceil(x)
+}
+pub fn fmod(x: double, y: double) -> double {
+    return fmod(x, y)
+}
