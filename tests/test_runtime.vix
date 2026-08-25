@@ -1,0 +1,32 @@
+mod vstd
+
+extern "C" { fn printf(format: ptr, ...): i32 }
+
+fn main(): i32
+{
+    if (!vstd::str::starts_with("standard", "stand")) return 1
+    if (!vstd::str::ends_with("standard", "dard")) return 2
+    if (!vstd::str::contains("standard", "and")) return 3
+
+    let path = "/tmp/vstd_runtime_test.txt"
+    if (!vstd::io::write_file(path, "vstd-ok")) return 4
+    match vstd::io::read_file(path)
+    {
+        Ok(value) ->
+        {
+            match value
+            {
+                VStr(content) -> { if (content != "vstd-ok") return 5 }
+                _ -> { return 6 }
+            }
+        }
+        _ -> { return 7 }
+    }
+
+    vstd::rand::seed(7)
+    let random = vstd::rand::range(10, 20)
+    if (random < 10 or random >= 20) return 8
+    if (vstd::time::unix() <= 0) return 9
+    printf("runtime ok random=%d\n", random)
+    return 0
+}

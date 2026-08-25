@@ -1,0 +1,13 @@
+mod vstd
+
+extern "C" { fn printf(format: ptr, ...): i32 }
+
+fn main(): i32
+{
+    let p = vstd::mem::alloc(8)
+    let b: ptr:[u8] = p
+    vstd::mem::fill(p, 65, 8)
+    printf("%d\n", b[0])
+    vstd::mem::release(p)
+    return 0
+}

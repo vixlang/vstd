@@ -1,0 +1,24 @@
+pub type Value =
+      VNull
+    | VBool(bool)
+    | VInt(i32)
+    | VFloat(f64)
+    | VStr(string)
+    | VList([Value])
+    | VPairs([Pair])
+
+pub type Pair = struct {
+    key: string,
+    val: Value
+}
+
+pub type Ordering = Less | Equal | Greater
+
+pub type Result = Ok(Value) | Err(string)
+
+pub type ValueArray = struct { items: [Value] }
+pub type ValueList = struct { items: [Value] }
+pub type ValueMap = struct { items: [Pair] }
+
+pub fn ok(value: Value): Result { return Ok(value) }
+pub fn err(message: string): Result { return Err(message) }

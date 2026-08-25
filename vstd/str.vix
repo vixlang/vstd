@@ -1,0 +1,41 @@
+extern "C"
+{
+    fn strcmp(a: ptr, b: ptr): i32
+    fn strdup(s: ptr): string
+    fn strlen(s: ptr): usize
+}
+
+pub fn equals(a: ptr, b: ptr): bool { return strcmp(a, b) == 0 }
+pub fn duplicate(s: ptr): string { return strdup(s) }
+pub fn length(s: ptr): usize { return strlen(s) }
+
+pub fn compare(a: ptr, b: ptr): Ordering
+{
+    let result = strcmp(a, b)
+    if (result < 0) return Less
+    if (result > 0) return Greater
+    return Equal
+}
+
+pub fn starts_with(value: string, prefix: string): bool
+{
+    if (prefix.length > value.length) return false
+    return value[0 .. prefix.length] == prefix
+}
+
+pub fn ends_with(value: string, suffix: string): bool
+{
+    if (suffix.length > value.length) return false
+    return value[value.length - suffix.length .. value.length] == suffix
+}
+
+pub fn contains(value: string, needle: string): bool
+{
+    if (needle.length == 0) return true
+    if (needle.length > value.length) return false
+    for (i in 0 .. value.length - needle.length + 1)
+    {
+        if (value[i .. i + needle.length] == needle) return true
+    }
+    return false
+}

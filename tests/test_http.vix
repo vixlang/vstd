@@ -1,0 +1,28 @@
+mod vstd
+
+extern "C" { fn printf(format: ptr, ...): i32 }
+
+fn main(): i32
+{
+    match vstd::http::get("example.com", "/")
+    {
+        Ok(value) ->
+        {
+            match value
+            {
+                VStr(response) ->
+                {
+                    if (!vstd::str::contains(response, " 200 "))
+                    {
+                        printf("unexpected response: %s\n", response[0 .. 80])
+                        return 1
+                    }
+                    printf("http ok bytes=%d\n", response.length)
+                }
+                _ -> { return 2 }
+            }
+        }
+        Err(message) -> { printf("http error: %s\n", message) return 3 }
+    }
+    return 0
+}

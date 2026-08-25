@@ -1,0 +1,12 @@
+extern "C"
+{
+    fn time(out: ptr): i64
+    fn usleep(microseconds: i32): i32
+}
+
+pub fn unix(): i64 { return time(0) }
+
+pub fn sleep_ms(milliseconds: i32)
+{
+    if (milliseconds > 0) usleep(milliseconds * 1000)
+}

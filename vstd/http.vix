@@ -1,0 +1,5 @@
+pub fn get(host: string, path: string): Result
+{
+    let request = "GET " + path + " HTTP/1.0\r\nHost: " + host + "\r\nConnection: close\r\n\r\n"
+    return vstd::net::request(host, 80, request)
+}

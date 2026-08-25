@@ -1,0 +1,47 @@
+extern "C"
+{
+    fn printf(format: ptr, ...): i32
+    fn fopen(path: ptr, mode: ptr): ptr
+    fn fclose(file: ptr): i32
+    fn fread(dst: ptr, size: usize, count: usize, file: ptr): usize
+    fn fwrite(src: ptr, size: usize, count: usize, file: ptr): usize
+    fn fseek(file: ptr, offset: i64, origin: i32): i32
+    fn ftell(file: ptr): i64
+    fn malloc(size: usize): ptr
+    fn free(p: ptr): void
+    fn strdup(s: ptr): string
+}
+
+pub fn write(value: string) { printf("%s", value) }
+pub fn line(value: string) { printf("%s\n", value) }
+
+pub fn write_file(path: string, content: string): bool
+{
+    let file = fopen(path, "wb")
+    if (file == 0) return false
+    let written = fwrite(content, 1, content.length, file)
+    fclose(file)
+    return written == content.length
+}
+
+pub fn read_file(path: string): Result
+{
+    let file = fopen(path, "rb")
+    if (file == 0) return vstd::types::err("cannot open file: " + path)
+    fseek(file, 0, 2)
+    let size = ftell(file)
+    fseek(file, 0, 0)
+    if (size < 0)
+    {
+        fclose(file)
+        return vstd::types::err("cannot determine file size: " + path)
+    }
+    let buffer = malloc(size + 1)
+    let bytes = fread(buffer, 1, size, file)
+    fclose(file)
+    let data: ptr:[u8] = buffer
+    data[bytes] = 0
+    let content = strdup(buffer)
+    free(buffer)
+    return vstd::types::ok(VStr(content))
+}

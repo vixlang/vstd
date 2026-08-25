@@ -1,0 +1,65 @@
+extern "C"
+{
+    fn snprintf(buf: ptr, n: usize, format: ptr, ...): i32
+    fn strdup(s: ptr): string
+    fn malloc(n: usize): ptr
+    fn free(p: ptr): void
+}
+
+fn number_string(value: f64): string
+{
+    let buf = malloc(64)
+    snprintf(buf, 64, "%.10g", value)
+    let out = strdup(buf)
+    free(buf)
+    return out
+}
+
+fn escape(value: string): string
+{
+    let mut out = ""
+    for (i in 0 .. value.length)
+    {
+        let c = value[i]
+        if (c == '"') out = out + "\\\""
+        elif (c == '\\') out = out + "\\\\"
+        elif (c == '\n') out = out + "\\n"
+        elif (c == '\r') out = out + "\\r"
+        elif (c == '\t') out = out + "\\t"
+        else out = out + value[i .. i + 1]
+    }
+    return out
+}
+
+pub fn stringify(value: Value): string
+{
+    match value
+    {
+        VNull -> { return "null" }
+        VBool(v) -> { if (v) return "true" else return "false" }
+        VInt(v) -> { return vstd::json::number_string(v) }
+        VFloat(v) -> { return vstd::json::number_string(v) }
+        VStr(v) -> { return "\"" + vstd::json::escape(v) + "\"" }
+        VList(items) ->
+        {
+            let mut out = "["
+            for (i in 0 .. items.length)
+            {
+                if (i > 0) out = out + ","
+                out = out + vstd::json::stringify(items[i])
+            }
+            return out + "]"
+        }
+        VPairs(items) ->
+        {
+            let mut out = "{"
+            for (i in 0 .. items.length)
+            {
+                if (i > 0) out = out + ","
+                out = out + "\"" + vstd::json::escape(items[i].key) + "\":" + vstd::json::stringify(items[i].val)
+            }
+            return out + "}"
+        }
+    }
+    return "null"
+}

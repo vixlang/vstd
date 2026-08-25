@@ -1,0 +1,71 @@
+extern "C"
+{
+    fn socket(domain: i32, kind: i32, protocol: i32): i32
+    fn connect(fd: i32, address: ptr, length: i32): i32
+    fn close(fd: i32): i32
+    fn send(fd: i32, buffer: ptr, length: usize, flags: i32): i32
+    fn recv(fd: i32, buffer: ptr, length: usize, flags: i32): i32
+    fn gethostbyname(name: ptr): ptr
+    fn malloc(size: usize): ptr
+    fn free(p: ptr): void
+    fn memset(dst: ptr, value: i32, size: usize): ptr
+    fn memcpy(dst: ptr, src: ptr, size: usize): ptr
+    fn strdup(s: ptr): string
+}
+
+pub fn request(host: string, port: i32, payload: string): Result
+{
+    let host_entry = gethostbyname(host)
+    if (host_entry == 0) return vstd::types::err("DNS lookup failed: " + host)
+    let host_words: ptr:[ptr] = host_entry
+    let addresses: ptr:[ptr] = host_words[3]
+    let address = addresses[0]
+    if (address == 0) return vstd::types::err("host has no address: " + host)
+
+    let socket_address = malloc(16)
+    memset(socket_address, 0, 16)
+    let bytes: ptr:[u8] = socket_address
+    bytes[0] = 2
+    bytes[2] = port / 256
+    bytes[3] = port % 256
+    memcpy(socket_address + 4, address, 4)
+
+    let fd = socket(2, 1, 0)
+    if (fd < 0)
+    {
+        free(socket_address)
+        return vstd::types::err("socket creation failed")
+    }
+    if (connect(fd, socket_address, 16) != 0)
+    {
+        close(fd)
+        free(socket_address)
+        return vstd::types::err("connection failed: " + host)
+    }
+    free(socket_address)
+
+    let sent = send(fd, payload, payload.length, 0)
+    if (sent < 0)
+    {
+        close(fd)
+        return vstd::types::err("send failed")
+    }
+
+    let buffer = malloc(4097)
+    let data: ptr:[u8] = buffer
+    let mut response = ""
+    let mut done = false
+    while (!done)
+    {
+        let count = recv(fd, buffer, 4096, 0)
+        if (count <= 0) done = true
+        else
+        {
+            data[count] = 0
+            response = response + strdup(buffer)
+        }
+    }
+    close(fd)
+    free(buffer)
+    return vstd::types::ok(VStr(response))
+}

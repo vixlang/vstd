@@ -1,0 +1,18 @@
+extern "C"
+{
+    fn rand(): i32
+    fn srand(seed: i32): void
+}
+
+pub fn seed(value: i32) { srand(value) }
+
+pub fn next(): i32
+{
+    return rand()
+}
+
+pub fn range(minimum: i32, maximum: i32): i32
+{
+    if (maximum <= minimum) return minimum
+    return minimum + vstd::rand::next() % (maximum - minimum)
+}

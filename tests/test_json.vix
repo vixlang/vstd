@@ -1,0 +1,15 @@
+mod vstd
+
+extern "C" { fn printf(format: ptr, ...): i32 }
+
+fn main(): i32
+{
+    let mut values: [Value] = []
+    values.push(VInt(7))
+    values.push(VBool(true))
+    values.push(VStr("a\"b"))
+    let mut pairs: [Pair] = []
+    pairs.push(Pair{ key: "items", val: VList(values) })
+    printf("%s\n", vstd::json::stringify(VPairs(pairs)))
+    return 0
+}

@@ -1,0 +1,38 @@
+pub fn new(): ValueMap { return ValueMap{ items: [] } }
+pub fn len(map: &ValueMap): i32 { return map.items.length }
+pub fn is_empty(map: &ValueMap): bool { return map.items.length == 0 }
+
+pub fn contains_key(map: &ValueMap, key: string): bool
+{
+    for (i in 0 .. map.items.length)
+    {
+        if (map.items[i].key == key) return true
+    }
+    return false
+}
+
+pub fn put(map: &ValueMap, key: string, value: Value)
+{
+    for (i in 0 .. map.items.length)
+    {
+        if (map.items[i].key == key)
+        {
+            let mut pair = map.items[i]
+            pair.val = value
+            map.items[i] = pair
+            return
+        }
+    }
+    map.items.push(Pair{ key: key, val: value })
+}
+
+pub fn get(map: &ValueMap, key: string): Result
+{
+    for (i in 0 .. map.items.length)
+    {
+        if (map.items[i].key == key) return vstd::types::ok(map.items[i].val)
+    }
+    return vstd::types::err("key not found: " + key)
+}
+
+pub fn clear(map: &ValueMap) { map.items = [] }

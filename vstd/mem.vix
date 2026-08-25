@@ -1,0 +1,14 @@
+extern "C"
+{
+    fn malloc(size: usize): ptr
+    fn free(p: ptr): void
+    fn memcpy(dst: ptr, src: ptr, n: usize): ptr
+    fn memset(dst: ptr, c: i32, n: usize): ptr
+    fn memcmp(a: ptr, b: ptr, n: usize): i32
+}
+
+pub fn alloc(size: usize): ptr { return malloc(size) }
+pub fn release(p: ptr) { free(p) }
+pub fn copy(dst: ptr, src: ptr, n: usize): ptr { return memcpy(dst, src, n) }
+pub fn fill(dst: ptr, c: i32, n: usize): ptr { return memset(dst, c, n) }
+pub fn compare(a: ptr, b: ptr, n: usize): i32 { return memcmp(a, b, n) }

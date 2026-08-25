@@ -1,0 +1,11 @@
+mod vstd
+
+extern "C" { fn printf(format: ptr, ...): i32 }
+
+fn main(): i32
+{
+    let a: ptr = "hello"
+    let b = vstd::str::duplicate(a)
+    printf("%d %d %s\n", vstd::str::equals(a, b), vstd::str::length(b), b)
+    return 0
+}
