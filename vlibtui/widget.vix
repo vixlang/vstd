@@ -1,0 +1,98 @@
+extern "C"
+{
+    fn malloc(size: usize): ptr
+    fn strdup(value: ptr): string
+    fn free(value: ptr): void
+}
+
+pub type TextBlock = struct { text: string, row: i32, col: i32, width: i32 }
+pub type InputBox = struct { value: string, cursor: i32, prompt: string }
+pub type TuiMessage = struct { role: string, content: string }
+pub type MessageList = struct { items: [TuiMessage], scroll: i32 }
+
+fn char_string(c: i32): string
+{
+    let data = malloc(2)
+    data[0] = c
+    data[1] = 0
+    let out = strdup(data)
+    free(data)
+    return out
+}
+
+fn clip(text: string, width: i32): string
+{
+    if (width <= 0) return ""
+    if (text.length <= width) return text
+    return text[0 .. width]
+}
+
+pub fn render_text(block: TextBlock): string
+{
+    return vlibtui::widget::clip(clone(block.text), block.width)
+}
+
+pub fn new_input(prompt: string): InputBox
+{
+    return InputBox{ value: "", cursor: 0, prompt: prompt }
+}
+
+pub fn input_insert(input: &mut InputBox, key: i32)
+{
+    if (key < 32 or key > 126) { return }
+    let character = vlibtui::widget::char_string(key)
+    input.value = input.value[0 .. input.cursor] + character + input.value[input.cursor .. input.value.length]
+    input.cursor = input.cursor + 1
+}
+
+pub fn input_backspace(input: &mut InputBox)
+{
+    if (input.cursor <= 0) { return }
+    input.value = input.value[0 .. input.cursor - 1] + input.value[input.cursor .. input.value.length]
+    input.cursor = input.cursor - 1
+}
+
+pub fn input_clear(input: &mut InputBox)
+{
+    input.value = ""
+    input.cursor = 0
+}
+
+pub fn render_input(input: &InputBox, width: i32): string
+{
+    return vlibtui::widget::clip(input.prompt + input.value, width)
+}
+
+pub fn new_messages(): MessageList { return MessageList{ items: [], scroll: 0 } }
+
+pub fn append_message(list: &mut MessageList, role: string, content: string)
+{
+    list.items.push(TuiMessage{ role: role, content: content })
+    list.scroll = 0
+}
+
+pub fn scroll_up(list: &mut MessageList)
+{
+    if (list.scroll < list.items.length) list.scroll = list.scroll + 1
+}
+
+pub fn scroll_down(list: &mut MessageList)
+{
+    if (list.scroll > 0) list.scroll = list.scroll - 1
+}
+
+pub fn render_messages(list: &MessageList, height: i32, width: i32): string
+{
+    if (height <= 0 or width <= 0) return ""
+    let mut end = list.items.length - list.scroll
+    if (end < 0) end = 0
+    let mut start = end - height
+    if (start < 0) start = 0
+    let mut out = ""
+    for (i in start .. end)
+    {
+        if (out.length > 0) out = out + "\n"
+        out = out + vlibtui::widget::clip(clone(list.items[i].role) + ": " + clone(list.items[i].content), width)
+    }
+    return out
+}

@@ -3,19 +3,19 @@ pub fn new(): ValueArray { return ValueArray{ items: [] } }
 pub fn len(a: &ValueArray): i32 { return a.items.length }
 pub fn is_empty(a: &ValueArray): bool { return a.items.length == 0 }
 
-pub fn push(a: &ValueArray, value: Value)
+pub fn push(a: &mut ValueArray, value: Value)
 {
     a.items.push(value)
 }
 
-pub fn get(a: &ValueArray, index: i32): Value { return a.items[index] }
+pub fn get(a: &ValueArray, index: i32): Value { return clone(a.items[index]) }
 
-pub fn set(a: &ValueArray, index: i32, value: Value)
+pub fn set(a: &mut ValueArray, index: i32, value: Value)
 {
     a.items[index] = value
 }
 
-pub fn clear(a: &ValueArray)
+pub fn clear(a: &mut ValueArray)
 {
     a.items = []
 }

@@ -1,0 +1,86 @@
+extern "C"
+{
+    fn snprintf(buf: ptr, n: usize, format: ptr, ...): i32
+    fn strdup(value: ptr): string
+    fn malloc(size: usize): ptr
+    fn free(value: ptr): void
+}
+
+pub type Screen = struct
+{
+    rows: i32,
+    cols: i32,
+    dirty: bool,
+    buffer: string
+}
+
+fn number_pair(row: i32, col: i32): string
+{
+    let data = malloc(48)
+    snprintf(data, 48, "\033[%d;%dH", row, col)
+    let out = strdup(data)
+    free(data)
+    return out
+}
+
+pub fn move_to(row: i32, col: i32)
+{
+    let safe_row = if (row < 1) { 1 } else { row }
+    let safe_col = if (col < 1) { 1 } else { col }
+    vlibtui::term::write_bytes(vlibtui::screen::number_pair(safe_row, safe_col))
+}
+
+pub fn write(text: string) { vlibtui::term::write_bytes(text) }
+pub fn flush() { vlibtui::term::flush() }
+pub fn clear() { vlibtui::term::clear() }
+
+pub fn new_screen(rows: i32, cols: i32): Screen
+{
+    let size = vlibtui::term::terminal_size()
+    let actual_rows = if (rows > 0) { rows } else { size.rows }
+    let actual_cols = if (cols > 0) { cols } else { size.cols }
+    return Screen{ rows: actual_rows, cols: actual_cols, dirty: true, buffer: "" }
+}
+
+pub fn resize(screen: &mut Screen)
+{
+    let size = vlibtui::term::terminal_size()
+    if (screen.rows != size.rows or screen.cols != size.cols)
+    {
+        screen.rows = size.rows
+        screen.cols = size.cols
+        screen.dirty = true
+    }
+}
+
+pub fn begin_frame(screen: &mut Screen)
+{
+    screen.buffer = "\033[H"
+    screen.dirty = true
+}
+
+pub fn draw(screen: &mut Screen, row: i32, col: i32, text: string)
+{
+    if (row < 1 or row > screen.rows or col < 1 or col > screen.cols) { return }
+    let available = screen.cols - col + 1
+    let clipped = if (text.length > available) { text[0 .. available] } else { text }
+    screen.buffer = screen.buffer + vlibtui::screen::number_pair(row, col) + clipped
+    screen.dirty = true
+}
+
+pub fn erase_line(screen: &mut Screen, row: i32)
+{
+    if (row < 1 or row > screen.rows) { return }
+    screen.buffer = screen.buffer + vlibtui::screen::number_pair(row, 1) + "\033[2K"
+    screen.dirty = true
+}
+
+pub fn present(screen: &mut Screen)
+{
+    if (screen.dirty)
+    {
+        vlibtui::term::write_bytes(clone(screen.buffer))
+        vlibtui::term::flush()
+        screen.dirty = false
+    }
+}

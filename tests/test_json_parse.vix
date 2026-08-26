@@ -1,0 +1,196 @@
+mod vstd
+
+extern "C" { fn printf(format: ptr, ...): i32 }
+
+fn fail(name: string): i32
+{
+    printf("FAIL %s\n", name)
+    return 1
+}
+
+fn expect_error(source: string): bool
+{
+    match vstd::json::parse(source)
+    {
+        Err(message) -> { return message.length > 0 }
+        _ -> { return false }
+    }
+}
+
+fn main(): i32
+{
+    match vstd::json::parse("null")
+    {
+        Ok(value) -> { match value { VNull -> {} _ -> { return fail("null kind") } } }
+        _ -> { return fail("null") }
+    }
+    match vstd::json::parse(" true ")
+    {
+        Ok(value) -> { match value { VBool(flag) -> { if (flag == false) return fail("true value") } _ -> { return fail("true kind") } } }
+        _ -> { return fail("true") }
+    }
+    match vstd::json::parse("false")
+    {
+        Ok(value) -> { match value { VBool(flag) -> { if (flag) return fail("false value") } _ -> { return fail("false kind") } } }
+        _ -> { return fail("false") }
+    }
+    match vstd::json::parse("-2147483648")
+    {
+        Ok(value) -> { match value { VInt(number) -> { if (number != -2147483648) return fail("integer value") } _ -> { return fail("integer kind") } } }
+        _ -> { return fail("integer") }
+    }
+    match vstd::json::parse("12.5e2")
+    {
+        Ok(value) ->
+        {
+            match value
+            {
+                VFloat(number) -> { if (number != 1250.0) return fail("float") }
+                _ -> { return fail("float kind") }
+            }
+        }
+        _ -> { return fail("float kind") }
+    }
+    match vstd::json::parse("2147483648")
+    {
+        Ok(value) ->
+        {
+            match value
+            {
+                VFloat(number) -> { if (number != 2147483648.0) return fail("large integer value") }
+                _ -> { return fail("large integer kind") }
+            }
+        }
+        _ -> { return fail("large integer parse") }
+    }
+    match vstd::json::parse("[]") { Ok(value) -> { if (vstd::json::kind(value) != "array") return fail("empty array") } _ -> { return fail("empty array parse") } }
+    match vstd::json::parse("{}") { Ok(value) -> { if (vstd::json::kind(value) != "object") return fail("empty object") } _ -> { return fail("empty object parse") } }
+
+    match vstd::json::parse("\"line\\nquote: \\\" slash: \\\\ unicode: \\u4f60\\u597d smile: \\ud83d\\ude00\"")
+    {
+        Ok(value) ->
+        {
+            match value
+            {
+                VStr(text) ->
+                {
+                    if (text != "line\nquote: \" slash: \\ unicode: 你好 smile: 😀") return fail("escaped string")
+                }
+                _ -> { return fail("escaped string kind") }
+            }
+        }
+        _ -> { return fail("escaped string parse") }
+    }
+
+    match vstd::json::parse("\"你好，Vix 😀\"")
+    {
+        Ok(value) ->
+        {
+            match value
+            {
+                VStr(text) -> { if (text != "你好，Vix 😀") return fail("raw UTF-8 value") }
+                _ -> { return fail("raw UTF-8 kind") }
+            }
+        }
+        _ -> { return fail("raw UTF-8 parse") }
+    }
+
+    let nested_source = "{\"name\":\"agent\",\"items\":[1,{\"ok\":true},null]}"
+    match vstd::json::parse(clone(nested_source))
+    {
+        Ok(root) ->
+        {
+            if (vstd::json::kind(clone(root)) != "object") return fail("object kind")
+            match vstd::json::get(clone(root), "items")
+            {
+                Ok(items) ->
+                {
+                    match vstd::json::at(clone(items), 1)
+                    {
+                        Ok(entry) ->
+                        {
+                            match vstd::json::get(entry, "ok")
+                            {
+                                Ok(VBool(true)) -> {}
+                                _ -> { return fail("nested get") }
+                            }
+                        }
+                        _ -> { return fail("nested at") }
+                    }
+                    match vstd::json::at(clone(items), 99) { Err(_) -> {} _ -> { return fail("at bounds") } }
+                }
+                _ -> { return fail("get items") }
+            }
+            match vstd::json::get(clone(root), "missing") { Err(_) -> {} _ -> { return fail("missing key") } }
+            let encoded = vstd::json::stringify(clone(root))
+            match vstd::json::parse(clone(encoded))
+            {
+                Ok(roundtrip) ->
+                {
+                    if (vstd::json::stringify(roundtrip) != clone(encoded)) return fail("roundtrip equality")
+                }
+                _ -> { return fail("roundtrip parse") }
+            }
+        }
+        _ -> { return fail("nested parse") }
+    }
+
+    if (expect_error("") == false) return fail("empty malformed")
+    if (expect_error("[1,]") == false) return fail("array trailing comma")
+    if (expect_error("{\"a\":1,}") == false) return fail("object trailing comma")
+    if (expect_error("01") == false) return fail("leading zero")
+    if (expect_error("1.") == false) return fail("missing fraction")
+    if (expect_error("\"bad\\x\"") == false) return fail("bad escape")
+    if (expect_error("true false") == false) return fail("trailing content")
+    if (expect_error("\"\\ud800\"") == false) return fail("unpaired surrogate")
+    match vstd::json::get(VInt(1), "x") { Err(_) -> {} _ -> { return fail("get wrong kind") } }
+    match vstd::json::at(VNull, 0) { Err(_) -> {} _ -> { return fail("at wrong kind") } }
+
+    let response = "{\"id\":\"chat-1\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"Hello from model\"}}]}"
+    match vstd::json::parse(clone(response))
+    {
+        Ok(root) ->
+        {
+            match vstd::json::get(clone(root), "choices")
+            {
+                Ok(choices) ->
+                {
+                    match vstd::json::at(clone(choices), 0)
+                    {
+                        Ok(choice) ->
+                        {
+                            match vstd::json::get(clone(choice), "message")
+                            {
+                                Ok(message) ->
+                                {
+                                    match vstd::json::get(clone(message), "content")
+                                    {
+                                        Ok(content_value) ->
+                                        {
+                                            match content_value
+                                            {
+                                                VStr(content) ->
+                                                {
+                                                    if (content != "Hello from model") return fail("OpenAI content value")
+                                                }
+                                                _ -> { return fail("OpenAI content kind") }
+                                            }
+                                        }
+                                        _ -> { return fail("OpenAI content") }
+                                    }
+                                }
+                                _ -> { return fail("OpenAI message") }
+                            }
+                        }
+                        _ -> { return fail("OpenAI first choice") }
+                    }
+                }
+                _ -> { return fail("OpenAI choices") }
+            }
+        }
+        _ -> { return fail("OpenAI response") }
+    }
+
+    printf("PASS json parse, query, stringify, malformed, OpenAI extraction\n")
+    return 0
+}

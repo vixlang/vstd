@@ -11,13 +11,13 @@ pub fn contains_key(map: &ValueMap, key: string): bool
     return false
 }
 
-pub fn put(map: &ValueMap, key: string, value: Value)
+pub fn put(map: &mut ValueMap, key: string, value: Value)
 {
     for (i in 0 .. map.items.length)
     {
         if (map.items[i].key == key)
         {
-            let mut pair = map.items[i]
+            let mut pair = clone(map.items[i])
             pair.val = value
             map.items[i] = pair
             return
@@ -30,9 +30,9 @@ pub fn get(map: &ValueMap, key: string): Result
 {
     for (i in 0 .. map.items.length)
     {
-        if (map.items[i].key == key) return vstd::types::ok(map.items[i].val)
+        if (map.items[i].key == key) return vstd::types::ok(clone(map.items[i].val))
     }
     return vstd::types::err("key not found: " + key)
 }
 
-pub fn clear(map: &ValueMap) { map.items = [] }
+pub fn clear(map: &mut ValueMap) { map.items = [] }

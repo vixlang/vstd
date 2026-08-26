@@ -1,0 +1,74 @@
+mod vlibtui
+
+extern "C" { fn printf(format: ptr, ...): i32 }
+
+fn draw_demo(screen: &Screen, messages: &MessageList, input: &InputBox)
+{
+    vlibtui::screen::begin_frame(screen)
+    for (row in 1 .. screen.rows + 1) { vlibtui::screen::erase_line(screen, row) }
+    vlibtui::screen::draw(screen, 1, 1, "Vix TUI demo — Enter adds a message, empty q quits")
+    let rendered = vlibtui::widget::render_messages(messages, screen.rows - 3, screen.cols)
+    let mut row = 2
+    let mut start = 0
+    for (i in 0 .. rendered.length)
+    {
+        if (rendered[i] == '\n')
+        {
+            vlibtui::screen::draw(screen, row, 1, rendered[start .. i])
+            row = row + 1
+            start = i + 1
+        }
+    }
+    if (start <= rendered.length) vlibtui::screen::draw(screen, row, 1, rendered[start .. rendered.length])
+    vlibtui::screen::draw(screen, screen.rows, 1, vlibtui::widget::render_input(input, screen.cols))
+    vlibtui::screen::present(screen)
+    vlibtui::screen::move_to(screen.rows, input.prompt.length + input.cursor + 1)
+    vlibtui::term::show_cursor()
+    vlibtui::term::flush()
+}
+
+fn main(): i32
+{
+    if (vlibtui::term::enter_raw_mode() == false)
+    {
+        printf("tui_demo requires an interactive TTY\n")
+        return 1
+    }
+    vlibtui::term::hide_cursor()
+    vlibtui::term::clear()
+
+    let mut screen = vlibtui::screen::new_screen(0, 0)
+    let mut messages = vlibtui::widget::new_messages()
+    vlibtui::widget::append_message(&messages, "system", "Welcome to vlibtui")
+    let mut input = vlibtui::widget::new_input("> ")
+    let mut running = true
+
+    while (running)
+    {
+        vlibtui::screen::resize(&screen)
+        draw_demo(&screen, &messages, &input)
+        let key = vlibtui::input::read_key()
+        if (key == 3) running = false
+        elif (key == 1001) vlibtui::widget::scroll_up(&messages)
+        elif (key == 1002) vlibtui::widget::scroll_down(&messages)
+        elif (key == 127 or key == 8) vlibtui::widget::input_backspace(&input)
+        elif (key == 13 or key == 10)
+        {
+            if (input.value.length > 0)
+            {
+                vlibtui::widget::append_message(&messages, "user", input.value)
+                vlibtui::widget::input_clear(&input)
+            }
+        }
+        elif (key == 'q' and input.value.length == 0) running = false
+        else vlibtui::widget::input_insert(&input, key)
+    }
+
+    vlibtui::term::hide_cursor()
+    vlibtui::term::clear()
+    vlibtui::term::leave_raw_mode()
+    vlibtui::term::show_cursor()
+    vlibtui::term::flush()
+    return 0
+}
+

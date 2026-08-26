@@ -2,14 +2,494 @@ extern "C"
 {
     fn snprintf(buf: ptr, n: usize, format: ptr, ...): i32
     fn strdup(s: ptr): string
+    fn strtod(s: ptr, end: ptr): f64
     fn malloc(n: usize): ptr
     fn free(p: ptr): void
 }
 
+type JsonParserState = struct { source: string, pos: i32, failed: bool, error: string }
+type JsonValueBuffer = struct { items: [Value] }
+type JsonPairBuffer = struct { items: [Pair] }
+
 fn number_string(value: f64): string
 {
     let buf = malloc(64)
-    snprintf(buf, 64, "%.10g", value)
+    snprintf(buf, 64, "%.17g", value)
+    let out = strdup(buf)
+    free(buf)
+    return out
+}
+
+fn position_string(value: i32): string
+{
+    let buf = malloc(32)
+    snprintf(buf, 32, "%d", value)
+    let out = strdup(buf)
+    free(buf)
+    return out
+}
+
+fn fail(parser: &mut JsonParserState, message: string)
+{
+    if (parser.failed == false)
+    {
+        parser.failed = true
+        parser.error = message + " at byte " + vstd::json::position_string(parser.pos)
+    }
+}
+
+fn is_space(c: i32): bool { return c == ' ' or c == '\t' or c == '\n' or c == '\r' }
+fn is_digit(c: i32): bool { return c >= '0' and c <= '9' }
+
+fn skip_space(parser: &mut JsonParserState)
+{
+    while (parser.pos < parser.source.length and vstd::json::is_space(parser.source[parser.pos]))
+    {
+        parser.pos = parser.pos + 1
+    }
+}
+
+fn hex_value(c: i32): i32
+{
+    if (c >= '0' and c <= '9') return c - '0'
+    if (c >= 'a' and c <= 'f') return c - 'a' + 10
+    if (c >= 'A' and c <= 'F') return c - 'A' + 10
+    return -1
+}
+
+fn parse_hex4(parser: &mut JsonParserState): i32
+{
+    if (parser.pos + 4 > parser.source.length)
+    {
+        vstd::json::fail(parser, "incomplete unicode escape")
+        return 0
+    }
+    let mut value = 0
+    for (i in 0 .. 4)
+    {
+        let digit = vstd::json::hex_value(parser.source[parser.pos + i])
+        if (digit < 0)
+        {
+            parser.pos = parser.pos + i
+            vstd::json::fail(parser, "invalid unicode escape")
+            return 0
+        }
+        value = value * 16 + digit
+    }
+    parser.pos = parser.pos + 4
+    return value
+}
+
+fn utf8(codepoint: i32): string
+{
+    let buf = malloc(5)
+    if (codepoint <= 127)
+    {
+        buf[0] = codepoint
+        buf[1] = 0
+    }
+    elif (codepoint <= 2047)
+    {
+        buf[0] = 192 + codepoint / 64
+        buf[1] = 128 + codepoint % 64
+        buf[2] = 0
+    }
+    elif (codepoint <= 65535)
+    {
+        buf[0] = 224 + codepoint / 4096
+        buf[1] = 128 + (codepoint / 64) % 64
+        buf[2] = 128 + codepoint % 64
+        buf[3] = 0
+    }
+    else
+    {
+        buf[0] = 240 + codepoint / 262144
+        buf[1] = 128 + (codepoint / 4096) % 64
+        buf[2] = 128 + (codepoint / 64) % 64
+        buf[3] = 128 + codepoint % 64
+        buf[4] = 0
+    }
+    let out = strdup(buf)
+    free(buf)
+    return out
+}
+
+fn parse_string_value(parser: &mut JsonParserState): string
+{
+    if (parser.pos >= parser.source.length or parser.source[parser.pos] != '"')
+    {
+        vstd::json::fail(parser, "expected string")
+        return ""
+    }
+    parser.pos = parser.pos + 1
+    let mut out = ""
+    while (parser.pos < parser.source.length)
+    {
+        let c = parser.source[parser.pos]
+        if (c == '"')
+        {
+            parser.pos = parser.pos + 1
+            return out
+        }
+        // String indexing yields a signed i8. UTF-8 bytes with the high bit
+        // set are negative after promotion, but they are not JSON controls.
+        if (c >= 0 and c < 32)
+        {
+            vstd::json::fail(parser, "unescaped control character in string")
+            return ""
+        }
+        if (c != '\\')
+        {
+            out = out + parser.source[parser.pos .. parser.pos + 1]
+            parser.pos = parser.pos + 1
+        }
+        else
+        {
+            parser.pos = parser.pos + 1
+            if (parser.pos >= parser.source.length)
+            {
+                vstd::json::fail(parser, "incomplete string escape")
+                return ""
+            }
+            let escaped = parser.source[parser.pos]
+            parser.pos = parser.pos + 1
+            if (escaped == '"') out = out + "\""
+            elif (escaped == '\\') out = out + "\\"
+            elif (escaped == '/') out = out + "/"
+            elif (escaped == 'b') out = out + vstd::json::utf8(8)
+            elif (escaped == 'f') out = out + vstd::json::utf8(12)
+            elif (escaped == 'n') out = out + "\n"
+            elif (escaped == 'r') out = out + "\r"
+            elif (escaped == 't') out = out + "\t"
+            elif (escaped == 'u')
+            {
+                let mut codepoint = vstd::json::parse_hex4(parser)
+                if (parser.failed) return ""
+                if (codepoint >= 55296 and codepoint <= 56319)
+                {
+                    if (parser.pos + 2 > parser.source.length or parser.source[parser.pos] != '\\' or parser.source[parser.pos + 1] != 'u')
+                    {
+                        vstd::json::fail(parser, "high surrogate without low surrogate")
+                        return ""
+                    }
+                    parser.pos = parser.pos + 2
+                    let low = vstd::json::parse_hex4(parser)
+                    if (parser.failed) return ""
+                    if (low < 56320 or low > 57343)
+                    {
+                        vstd::json::fail(parser, "invalid low surrogate")
+                        return ""
+                    }
+                    codepoint = 65536 + (codepoint - 55296) * 1024 + low - 56320
+                }
+                elif (codepoint >= 56320 and codepoint <= 57343)
+                {
+                    vstd::json::fail(parser, "unexpected low surrogate")
+                    return ""
+                }
+                out = out + vstd::json::utf8(codepoint)
+            }
+            else
+            {
+                vstd::json::fail(parser, "invalid string escape")
+                return ""
+            }
+        }
+    }
+    vstd::json::fail(parser, "unterminated string")
+    return ""
+}
+
+fn consume_literal(parser: &mut JsonParserState, literal: string): bool
+{
+    if (parser.pos + literal.length > parser.source.length) return false
+    for (i in 0 .. literal.length)
+    {
+        if (parser.source[parser.pos + i] != literal[i]) return false
+    }
+    parser.pos = parser.pos + literal.length
+    return true
+}
+
+fn parse_number_value(parser: &mut JsonParserState): Value
+{
+    let start = parser.pos
+    let mut negative = false
+    if (parser.source[parser.pos] == '-')
+    {
+        negative = true
+        parser.pos = parser.pos + 1
+    }
+    if (parser.pos >= parser.source.length)
+    {
+        vstd::json::fail(parser, "expected digit after minus sign")
+        return VNull
+    }
+    let mut integer = 0
+    let mut integer_fits = true
+    if (parser.source[parser.pos] == '0')
+    {
+        parser.pos = parser.pos + 1
+        if (parser.pos < parser.source.length and vstd::json::is_digit(parser.source[parser.pos]))
+        {
+            vstd::json::fail(parser, "leading zero in number")
+            return VNull
+        }
+    }
+    else
+    {
+        if (vstd::json::is_digit(parser.source[parser.pos]) == false)
+        {
+            vstd::json::fail(parser, "expected digit")
+            return VNull
+        }
+        while (parser.pos < parser.source.length and vstd::json::is_digit(parser.source[parser.pos]))
+        {
+            let digit = parser.source[parser.pos] - '0'
+            if (integer_fits)
+            {
+                if (negative)
+                {
+                    if (integer < -214748364 or (integer == -214748364 and digit > 8)) integer_fits = false
+                    else integer = integer * 10 - digit
+                }
+                else
+                {
+                    if (integer > 214748364 or (integer == 214748364 and digit > 7)) integer_fits = false
+                    else integer = integer * 10 + digit
+                }
+            }
+            parser.pos = parser.pos + 1
+        }
+    }
+    let mut is_float = false
+    if (parser.pos < parser.source.length and parser.source[parser.pos] == '.')
+    {
+        is_float = true
+        parser.pos = parser.pos + 1
+        if (parser.pos >= parser.source.length or vstd::json::is_digit(parser.source[parser.pos]) == false)
+        {
+            vstd::json::fail(parser, "expected digit after decimal point")
+            return VNull
+        }
+        while (parser.pos < parser.source.length and vstd::json::is_digit(parser.source[parser.pos]))
+        {
+            parser.pos = parser.pos + 1
+        }
+    }
+    if (parser.pos < parser.source.length and (parser.source[parser.pos] == 'e' or parser.source[parser.pos] == 'E'))
+    {
+        is_float = true
+        parser.pos = parser.pos + 1
+        if (parser.pos < parser.source.length and (parser.source[parser.pos] == '+' or parser.source[parser.pos] == '-'))
+        {
+            parser.pos = parser.pos + 1
+        }
+        if (parser.pos >= parser.source.length or vstd::json::is_digit(parser.source[parser.pos]) == false)
+        {
+            vstd::json::fail(parser, "expected exponent digits")
+            return VNull
+        }
+        while (parser.pos < parser.source.length and vstd::json::is_digit(parser.source[parser.pos]))
+        {
+            parser.pos = parser.pos + 1
+        }
+    }
+    if (is_float == false and integer_fits) return VInt(integer)
+    return VFloat(strtod(parser.source[start .. parser.pos], nil))
+}
+
+fn parse_value(parser: &mut JsonParserState): Value
+{
+    vstd::json::skip_space(parser)
+    if (parser.pos >= parser.source.length)
+    {
+        vstd::json::fail(parser, "expected JSON value")
+        return VNull
+    }
+    let c = parser.source[parser.pos]
+    if (c == 'n')
+    {
+        if (vstd::json::consume_literal(parser, "null")) return VNull
+        vstd::json::fail(parser, "invalid literal")
+        return VNull
+    }
+    if (c == 't')
+    {
+        if (vstd::json::consume_literal(parser, "true")) return VBool(true)
+        vstd::json::fail(parser, "invalid literal")
+        return VNull
+    }
+    if (c == 'f')
+    {
+        if (vstd::json::consume_literal(parser, "false")) return VBool(false)
+        vstd::json::fail(parser, "invalid literal")
+        return VNull
+    }
+    if (c == '"') return VStr(vstd::json::parse_string_value(parser))
+    if (c == '-' or vstd::json::is_digit(c)) return vstd::json::parse_number_value(parser)
+    if (c == '[')
+    {
+        parser.pos = parser.pos + 1
+        vstd::json::skip_space(parser)
+        let mut values = JsonValueBuffer{ items: [] }
+        if (parser.pos < parser.source.length and parser.source[parser.pos] == ']')
+        {
+            parser.pos = parser.pos + 1
+            return VList(values.items)
+        }
+        while (parser.failed == false)
+        {
+            let value = vstd::json::parse_value(parser)
+            if (parser.failed) return VNull
+            values.items.push(value)
+            vstd::json::skip_space(parser)
+            if (parser.pos >= parser.source.length)
+            {
+                vstd::json::fail(parser, "unterminated array")
+                return VNull
+            }
+            if (parser.source[parser.pos] == ']')
+            {
+                parser.pos = parser.pos + 1
+                return VList(values.items)
+            }
+            if (parser.source[parser.pos] != ',')
+            {
+                vstd::json::fail(parser, "expected comma or closing bracket")
+                return VNull
+            }
+            parser.pos = parser.pos + 1
+            vstd::json::skip_space(parser)
+            if (parser.pos < parser.source.length and parser.source[parser.pos] == ']')
+            {
+                vstd::json::fail(parser, "trailing comma in array")
+                return VNull
+            }
+        }
+        return VNull
+    }
+    if (c == '{')
+    {
+        parser.pos = parser.pos + 1
+        vstd::json::skip_space(parser)
+        let mut pairs = JsonPairBuffer{ items: [] }
+        if (parser.pos < parser.source.length and parser.source[parser.pos] == '}')
+        {
+            parser.pos = parser.pos + 1
+            return VPairs(pairs.items)
+        }
+        while (parser.failed == false)
+        {
+            if (parser.pos >= parser.source.length or parser.source[parser.pos] != '"')
+            {
+                vstd::json::fail(parser, "expected object key string")
+                return VNull
+            }
+            let key = vstd::json::parse_string_value(parser)
+            if (parser.failed) return VNull
+            vstd::json::skip_space(parser)
+            if (parser.pos >= parser.source.length or parser.source[parser.pos] != ':')
+            {
+                vstd::json::fail(parser, "expected colon after object key")
+                return VNull
+            }
+            parser.pos = parser.pos + 1
+            let value = vstd::json::parse_value(parser)
+            if (parser.failed) return VNull
+            pairs.items.push(Pair{ key: key, val: value })
+            vstd::json::skip_space(parser)
+            if (parser.pos >= parser.source.length)
+            {
+                vstd::json::fail(parser, "unterminated object")
+                return VNull
+            }
+            if (parser.source[parser.pos] == '}')
+            {
+                parser.pos = parser.pos + 1
+                return VPairs(pairs.items)
+            }
+            if (parser.source[parser.pos] != ',')
+            {
+                vstd::json::fail(parser, "expected comma or closing brace")
+                return VNull
+            }
+            parser.pos = parser.pos + 1
+            vstd::json::skip_space(parser)
+            if (parser.pos < parser.source.length and parser.source[parser.pos] == '}')
+            {
+                vstd::json::fail(parser, "trailing comma in object")
+                return VNull
+            }
+        }
+        return VNull
+    }
+    vstd::json::fail(parser, "unexpected character")
+    return VNull
+}
+
+pub fn parse(source: string): Result
+{
+    let mut parser = JsonParserState{ source: source, pos: 0, failed: false, error: "" }
+    let value = vstd::json::parse_value(&mut parser)
+    if (parser.failed) return Err(parser.error)
+    vstd::json::skip_space(&mut parser)
+    if (parser.pos != parser.source.length)
+    {
+        vstd::json::fail(&mut parser, "unexpected trailing content")
+        return Err(parser.error)
+    }
+    return Ok(value)
+}
+
+pub fn get(value: Value, key: string): Result
+{
+    match value
+    {
+        VPairs(items) ->
+        {
+            for (i in 0 .. items.length)
+            {
+                if (items[i].key == key) return Ok(clone(items[i].val))
+            }
+            return Err("key not found: " + key)
+        }
+        _ -> { return Err("cannot get key from " + vstd::json::kind(value)) }
+    }
+}
+
+pub fn at(value: Value, index: i32): Result
+{
+    match value
+    {
+        VList(items) ->
+        {
+            if (index < 0 or index >= items.length) return Err("array index out of bounds")
+            return Ok(clone(items[index]))
+        }
+        _ -> { return Err("cannot index " + vstd::json::kind(value)) }
+    }
+}
+
+pub fn kind(value: Value): string
+{
+    match value
+    {
+        VNull -> { return "null" }
+        VBool(_) -> { return "bool" }
+        VInt(_) -> { return "int" }
+        VFloat(_) -> { return "float" }
+        VStr(_) -> { return "string" }
+        VList(_) -> { return "array" }
+        VPairs(_) -> { return "object" }
+    }
+    return "unknown"
+}
+
+fn escape_control(value: i32): string
+{
+    let buf = malloc(8)
+    snprintf(buf, 8, "\\u%04x", value)
     let out = strdup(buf)
     free(buf)
     return out
@@ -23,9 +503,12 @@ fn escape(value: string): string
         let c = value[i]
         if (c == '"') out = out + "\\\""
         elif (c == '\\') out = out + "\\\\"
+        elif (c == 8) out = out + "\\b"
+        elif (c == 12) out = out + "\\f"
         elif (c == '\n') out = out + "\\n"
         elif (c == '\r') out = out + "\\r"
         elif (c == '\t') out = out + "\\t"
+        elif (c >= 0 and c < 32) out = out + vstd::json::escape_control(c)
         else out = out + value[i .. i + 1]
     }
     return out
@@ -46,7 +529,7 @@ pub fn stringify(value: Value): string
             for (i in 0 .. items.length)
             {
                 if (i > 0) out = out + ","
-                out = out + vstd::json::stringify(items[i])
+                out = out + vstd::json::stringify(clone(items[i]))
             }
             return out + "]"
         }
@@ -56,7 +539,7 @@ pub fn stringify(value: Value): string
             for (i in 0 .. items.length)
             {
                 if (i > 0) out = out + ","
-                out = out + "\"" + vstd::json::escape(items[i].key) + "\":" + vstd::json::stringify(items[i].val)
+                out = out + "\"" + vstd::json::escape(clone(items[i].key)) + "\":" + vstd::json::stringify(clone(items[i].val))
             }
             return out + "}"
         }

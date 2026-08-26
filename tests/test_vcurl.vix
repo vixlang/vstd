@@ -1,0 +1,87 @@
+mod vstd
+mod vlibcurl
+
+extern "C" { fn printf(format: ptr, ...): i32 }
+
+fn fail(name: string, detail: string): i32
+{
+    printf("FAIL %s: %s\n", name, detail)
+    return 1
+}
+
+fn json_from_response(result: Result, name: string): Result
+{
+    match result
+    {
+        Ok(value) ->
+        {
+            match value
+            {
+                VStr(body) -> { return vstd::json::parse(body) }
+                _ -> { return Err(name + " returned non-string body") }
+            }
+        }
+        Err(message) -> { return Err(name + ": " + message) }
+    }
+}
+
+fn main(): i32
+{
+    match json_from_response(vlibcurl::get("https://httpbin.org", "/get?vix=hello", "/tmp/vstd_vcurl_get.json"), "GET")
+    {
+        Ok(root) ->
+        {
+            match vstd::json::get(clone(root), "args")
+            {
+                Ok(args) ->
+                {
+                    match vstd::json::get(clone(args), "vix")
+                    {
+                        Ok(value) ->
+                        {
+                            match value
+                            {
+                                VStr(text) -> { if (text != "hello") return fail("GET query", text) }
+                                _ -> { return fail("GET query", "wrong JSON kind") }
+                            }
+                        }
+                        Err(message) -> { return fail("GET query", message) }
+                    }
+                }
+                Err(message) -> { return fail("GET args", message) }
+            }
+        }
+        Err(message) -> { return fail("GET", message) }
+    }
+
+    let body = "{\"message\":\"hello from Vix\",\"count\":2}"
+    match json_from_response(vlibcurl::post_json("https://httpbin.org", "/post", clone(body), "", "/tmp/vstd_vcurl_post.json"), "POST")
+    {
+        Ok(root) ->
+        {
+            match vstd::json::get(clone(root), "json")
+            {
+                Ok(echoed) ->
+                {
+                    match vstd::json::get(clone(echoed), "message")
+                    {
+                        Ok(value) ->
+                        {
+                            match value
+                            {
+                                VStr(text) -> { if (text != "hello from Vix") return fail("POST JSON", text) }
+                                _ -> { return fail("POST JSON", "wrong JSON kind") }
+                            }
+                        }
+                        Err(message) -> { return fail("POST message", message) }
+                    }
+                }
+                Err(message) -> { return fail("POST json", message) }
+            }
+        }
+        Err(message) -> { return fail("POST", message) }
+    }
+
+    printf("PASS vcurl public GET and POST JSON\n")
+    return 0
+}

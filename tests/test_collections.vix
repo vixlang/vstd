@@ -5,15 +5,15 @@ extern "C" { fn printf(format: ptr, ...): i32 }
 fn main(): i32
 {
     let mut array = vstd::array::new()
-    for (i in 0 .. 100) { vstd::array::push(&array, VInt(i)) }
+    for (i in 0 .. 100) { vstd::array::push(&mut array, VInt(i)) }
 
     let mut list = vstd::list::new()
-    vstd::list::append(&list, VStr("tail"))
-    vstd::list::prepend(&list, VStr("head"))
+    vstd::list::append(&mut list, VStr("tail"))
+    vstd::list::prepend(&mut list, VStr("head"))
 
     let mut map = vstd::map::new()
-    vstd::map::put(&map, "answer", VInt(42))
-    vstd::map::put(&map, "answer", VInt(43))
+    vstd::map::put(&mut map, "answer", VInt(42))
+    vstd::map::put(&mut map, "answer", VInt(43))
 
     printf("array=%d list=%d map=%d\n", vstd::array::len(&array), vstd::list::len(&list), vstd::map::len(&map))
     match vstd::map::get(&map, "answer")

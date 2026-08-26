@@ -1,0 +1,69 @@
+// Minimal Vix implementation of curl, backed directly by libcurl.
+//
+// Build: vixc tests/curl.vix -lcurl -o /tmp/vix-curl
+// GET:   /tmp/vix-curl https://example.com
+// POST:  /tmp/vix-curl https://api.example.com/items '{"name":"vix"}' TOKEN
+//
+// The optional TOKEN becomes: Authorization: Bearer TOKEN
+extern "C"
+{
+    fn printf(format: ptr, ...): i32
+    fn strdup(value: ptr): string
+    fn curl_global_init(flags: i32): i32
+    fn curl_global_cleanup()
+    fn curl_easy_init(): ptr
+    fn curl_easy_setopt(handle: ptr, option: i32, ...): i32
+    fn curl_easy_perform(handle: ptr): i32
+    fn curl_easy_cleanup(handle: ptr)
+    fn curl_easy_strerror(code: i32): ptr
+    fn curl_slist_append(list: ptr, value: ptr): ptr
+    fn curl_slist_free_all(list: ptr)
+}
+
+fn main(argc: i32, argv: ptr): i32
+{
+    if (argc < 2)
+    {
+        printf("usage: vix-curl <url> [json-body] [bearer-token]\n")
+        return 64
+    }
+    let av: ptr:[ptr] = argv
+    let url = strdup(av[1])
+    if (curl_global_init(3) != 0)
+    {
+        printf("curl: global initialization failed\n")
+        return 2
+    }
+    let handle = curl_easy_init()
+    if (handle == 0)
+    {
+        curl_global_cleanup()
+        printf("curl: handle creation failed\n")
+        return 2
+    }
+
+    let mut headers: ptr = 0
+    curl_easy_setopt(handle, 10002, url)
+    curl_easy_setopt(handle, 52, 1)
+
+    if (argc >= 3)
+    {
+        let body = strdup(av[2])
+        headers = curl_slist_append(headers, "Content-Type: application/json")
+        curl_easy_setopt(handle, 47, 1)
+        curl_easy_setopt(handle, 10015, body)
+    }
+    if (argc >= 4)
+    {
+        let token = strdup(av[3])
+        headers = curl_slist_append(headers, "Authorization: Bearer " + token)
+    }
+    if (headers != 0) curl_easy_setopt(handle, 10023, headers)
+
+    let status = curl_easy_perform(handle)
+    if (status != 0) printf("\ncurl: %s\n", curl_easy_strerror(status))
+    if (headers != 0) curl_slist_free_all(headers)
+    curl_easy_cleanup(handle)
+    curl_global_cleanup()
+    return status
+}

@@ -1,0 +1,33 @@
+mod vstd
+mod vlibtui
+
+extern "C" { fn printf(format: ptr, ...): i32 }
+
+fn main(): i32
+{
+    let block = TextBlock{ text: "abcdefgh", row: 1, col: 1, width: 5 }
+    if (vlibtui::widget::render_text(clone(block)) != "abcde") return 1
+
+    let mut input = vlibtui::widget::new_input("> ")
+    vlibtui::widget::input_insert(&mut input, 'h')
+    vlibtui::widget::input_insert(&mut input, 'i')
+    vlibtui::widget::input_backspace(&mut input)
+    if (vlibtui::widget::render_input(&input, 10) != "> h") return 2
+
+    let mut messages = vlibtui::widget::new_messages()
+    vlibtui::widget::append_message(&mut messages, "user", "one")
+    vlibtui::widget::append_message(&mut messages, "assistant", "two")
+    vlibtui::widget::append_message(&mut messages, "user", "three")
+    if (vlibtui::widget::render_messages(&messages, 2, 80) != "assistant: two\nuser: three") return 3
+    vlibtui::widget::scroll_up(&mut messages)
+    if (vlibtui::widget::render_messages(&messages, 2, 80) != "user: one\nassistant: two") return 4
+
+    let mut screen = vlibtui::screen::new_screen(4, 20)
+    vlibtui::screen::begin_frame(&mut screen)
+    vlibtui::screen::draw(&mut screen, 2, 3, "hello")
+    if (vstd::str::contains(clone(screen.buffer), "\033[2;3Hhello") == false) return 5
+    if (screen.dirty == false) return 6
+
+    printf("PASS vlibtui non-interactive render and widgets\n")
+    return 0
+}

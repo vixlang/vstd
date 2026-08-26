@@ -1,0 +1,48 @@
+extern "C"
+{
+    fn read(fd: i32, data: ptr, size: usize): i64
+    fn malloc(size: usize): ptr
+    fn free(value: ptr): void
+}
+
+pub fn read_key(): i32
+{
+    let data = malloc(1)
+    if (data == 0) return -1
+    let bytes: ptr:[u8] = data
+    if (read(0, data, 1) != 1)
+    {
+        free(data)
+        return -1
+    }
+    let first = bytes[0]
+    if (first != 27)
+    {
+        free(data)
+        return first
+    }
+
+    if (read(0, data, 1) != 1)
+    {
+        free(data)
+        return 27
+    }
+    if (bytes[0] != '[')
+    {
+        free(data)
+        return 27
+    }
+    if (read(0, data, 1) != 1)
+    {
+        free(data)
+        return 27
+    }
+    let third = bytes[0]
+    free(data)
+    if (third == 'A') return 1001
+    if (third == 'B') return 1002
+    if (third == 'C') return 1003
+    if (third == 'D') return 1004
+    return 27
+}
+

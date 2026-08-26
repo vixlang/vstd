@@ -2,21 +2,21 @@ pub fn new(): ValueList { return ValueList{ items: [] } }
 pub fn len(list: &ValueList): i32 { return list.items.length }
 pub fn is_empty(list: &ValueList): bool { return list.items.length == 0 }
 
-pub fn append(list: &ValueList, value: Value) { list.items.push(value) }
+pub fn append(list: &mut ValueList, value: Value) { list.items.push(value) }
 
-pub fn prepend(list: &ValueList, value: Value)
+pub fn prepend(list: &mut ValueList, value: Value)
 {
     let mut out: [Value] = []
     out.push(value)
-    for (i in 0 .. list.items.length) { out.push(list.items[i]) }
+    for (i in 0 .. list.items.length) { out.push(clone(list.items[i])) }
     list.items = out
 }
 
-pub fn get(list: &ValueList, index: i32): Value { return list.items[index] }
+pub fn get(list: &ValueList, index: i32): Value { return clone(list.items[index]) }
 
-pub fn set(list: &ValueList, index: i32, value: Value)
+pub fn set(list: &mut ValueList, index: i32, value: Value)
 {
     list.items[index] = value
 }
 
-pub fn clear(list: &ValueList) { list.items = [] }
+pub fn clear(list: &mut ValueList) { list.items = [] }

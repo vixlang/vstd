@@ -1,0 +1,139 @@
+extern "C"
+{
+    fn fopen(path: ptr, mode: ptr): ptr
+    fn fclose(file: ptr): i32
+    fn strdup(value: ptr): string
+    fn snprintf(buf: ptr, n: usize, format: ptr, ...): i32
+    fn malloc(n: usize): ptr
+    fn free(p: ptr): void
+    fn curl_global_init(flags: i32): i32
+    fn curl_global_cleanup()
+    fn curl_easy_init(): ptr
+    fn curl_easy_setopt(handle: ptr, option: i32, ...): i32
+    fn curl_easy_getinfo(handle: ptr, info: i32, ...): i32
+    fn curl_easy_perform(handle: ptr): i32
+    fn curl_easy_cleanup(handle: ptr)
+    fn curl_easy_strerror(code: i32): ptr
+    fn curl_slist_append(list: ptr, value: ptr): ptr
+    fn curl_slist_free_all(list: ptr)
+}
+
+pub type CurlRequest = struct
+{
+    base_url: string,
+    endpoint: string,
+    method: string,
+    body: string,
+    headers: [string],
+    bearer_token: string,
+    output_path: string
+}
+
+fn status_string(status: i64): string
+{
+    let buf = malloc(32)
+    snprintf(buf, 32, "%ld", status)
+    let out = strdup(buf)
+    free(buf)
+    return out
+}
+
+fn join_url(base_url: string, endpoint: string): string
+{
+    if (vstd::str::starts_with(clone(endpoint), "http://") or vstd::str::starts_with(clone(endpoint), "https://")) return endpoint
+    if (base_url.length == 0) return endpoint
+    if (endpoint.length == 0) return base_url
+    let base_slash = base_url[base_url.length - 1] == '/'
+    let endpoint_slash = endpoint[0] == '/'
+    if (base_slash and endpoint_slash) return base_url + endpoint[1 .. endpoint.length]
+    if (base_slash or endpoint_slash) return base_url + endpoint
+    return base_url + "/" + endpoint
+}
+
+pub fn request(config: CurlRequest): Result
+{
+    if (config.output_path.length == 0) return Err("vlibcurl output_path must not be empty")
+    if (config.method.length == 0) return Err("vlibcurl method must not be empty")
+    let output = fopen(config.output_path, "wb")
+    if (output == 0) return Err("vlibcurl cannot open output file: " + config.output_path)
+    if (curl_global_init(3) != 0)
+    {
+        fclose(output)
+        return Err("vlibcurl global initialization failed")
+    }
+    let handle = curl_easy_init()
+    if (handle == 0)
+    {
+        curl_global_cleanup()
+        fclose(output)
+        return Err("vlibcurl handle creation failed")
+    }
+
+    let url = vlibcurl::join_url(clone(config.base_url), clone(config.endpoint))
+    let mut headers: ptr = 0
+    for (i in 0 .. config.headers.length) { headers = curl_slist_append(headers, config.headers[i]) }
+    if (config.bearer_token.length > 0) headers = curl_slist_append(headers, "Authorization: Bearer " + config.bearer_token)
+
+    curl_easy_setopt(handle, 10002, url)
+    curl_easy_setopt(handle, 10036, config.method)
+    curl_easy_setopt(handle, 10001, output)
+    curl_easy_setopt(handle, 52, 1)
+    curl_easy_setopt(handle, 99, 1)
+    curl_easy_setopt(handle, 78, 15)
+    curl_easy_setopt(handle, 13, 60)
+    curl_easy_setopt(handle, 10018, "vix-vlibcurl/1.0")
+    if (config.body.length > 0)
+    {
+        curl_easy_setopt(handle, 10015, config.body)
+        curl_easy_setopt(handle, 60, config.body.length)
+    }
+    if (headers != 0) curl_easy_setopt(handle, 10023, headers)
+
+    let curl_status = curl_easy_perform(handle)
+    let mut http_status: i64 = 0
+    if (curl_status == 0) curl_easy_getinfo(handle, 2097154, &http_status)
+    if (headers != 0) curl_slist_free_all(headers)
+    curl_easy_cleanup(handle)
+    curl_global_cleanup()
+    fclose(output)
+
+    if (curl_status != 0) return Err("vlibcurl request failed: " + strdup(curl_easy_strerror(curl_status)))
+    match vstd::io::read_file(clone(config.output_path))
+    {
+        Ok(value) ->
+        {
+            if (http_status < 200 or http_status >= 300)
+            {
+                match value
+                {
+                    VStr(body) -> { return Err("HTTP " + vlibcurl::status_string(http_status) + ": " + body) }
+                    _ -> { return Err("HTTP " + vlibcurl::status_string(http_status)) }
+                }
+            }
+            return Ok(value)
+        }
+        Err(message) -> { return Err(message) }
+    }
+}
+
+pub fn get(base_url: string, endpoint: string, output_path: string): Result
+{
+    return vlibcurl::request(CurlRequest{
+        base_url: base_url, endpoint: endpoint, method: "GET", body: "",
+        headers: [], bearer_token: "", output_path: output_path
+    })
+}
+
+pub fn post_json(base_url: string, endpoint: string, body: string, bearer_token: string, output_path: string): Result
+{
+    return vlibcurl::request(CurlRequest{
+        base_url: base_url, endpoint: endpoint, method: "POST", body: body,
+        headers: ["Content-Type: application/json", "Accept: application/json"],
+        bearer_token: bearer_token, output_path: output_path
+    })
+}
+
+pub fn chat_completion(base_url: string, endpoint: string, body: string, bearer_token: string, output_path: string): Result
+{
+    return vlibcurl::post_json(base_url, endpoint, body, bearer_token, output_path)
+}

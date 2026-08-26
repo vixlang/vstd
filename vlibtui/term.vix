@@ -1,0 +1,115 @@
+extern "C"
+{
+    fn isatty(fd: i32): i32
+    fn tcgetattr(fd: i32, state: ptr): i32
+    fn tcsetattr(fd: i32, action: i32, state: ptr): i32
+    fn cfmakeraw(state: ptr)
+    fn ioctl(fd: i32, request: i64, value: ptr): i32
+    fn write(fd: i32, data: ptr, size: usize): i64
+    fn fflush(stream: ptr): i32
+    fn malloc(size: usize): ptr
+    fn free(value: ptr): void
+    fn memcpy(dst: ptr, src: ptr, size: usize): ptr
+    fn atexit(callback: fn(): void): i32
+    fn signal(number: i32, handler: fn(i32): void): ptr
+    fn _exit(status: i32): void
+}
+
+pub type TerminalSize = struct { rows: i32, cols: i32 }
+
+let mut tui_saved_termios: ptr = 0
+let mut tui_raw_active: i32 = 0
+let mut tui_cleanup_registered: i32 = 0
+
+pub fn write_bytes(text: string)
+{
+    if (text.length > 0) write(1, text, text.length)
+}
+
+pub fn flush() { fflush(nil) }
+pub fn hide_cursor() { vlibtui::term::write_bytes("\033[?25l") }
+pub fn show_cursor() { vlibtui::term::write_bytes("\033[?25h") }
+pub fn clear() { vlibtui::term::write_bytes("\033[2J\033[H") }
+
+pub fn restore_at_exit()
+{
+    vlibtui::term::leave_raw_mode()
+    vlibtui::term::show_cursor()
+    vlibtui::term::flush()
+}
+
+fn handle_signal(number: i32)
+{
+    if (vlibtui::term::tui_raw_active == 1 and vlibtui::term::tui_saved_termios != 0)
+    {
+        tcsetattr(0, 0, vlibtui::term::tui_saved_termios)
+    }
+    write(1, "\033[?25h", 6)
+    _exit(128 + number)
+}
+
+pub fn enter_raw_mode(): bool
+{
+    if (vlibtui::term::tui_raw_active == 1) return true
+    if (isatty(0) == 0 or isatty(1) == 0) return false
+    let saved = malloc(64)
+    let current = malloc(64)
+    if (saved == 0 or current == 0)
+    {
+        if (saved != 0) free(saved)
+        if (current != 0) free(current)
+        return false
+    }
+    if (tcgetattr(0, saved) != 0)
+    {
+        free(saved)
+        free(current)
+        return false
+    }
+    memcpy(current, saved, 64)
+    cfmakeraw(current)
+    if (tcsetattr(0, 0, current) != 0)
+    {
+        free(saved)
+        free(current)
+        return false
+    }
+    free(current)
+    vlibtui::term::tui_saved_termios = saved
+    vlibtui::term::tui_raw_active = 1
+    if (vlibtui::term::tui_cleanup_registered == 0)
+    {
+        atexit(vlibtui::term::restore_at_exit)
+        signal(2, vlibtui::term::handle_signal)
+        signal(15, vlibtui::term::handle_signal)
+        vlibtui::term::tui_cleanup_registered = 1
+    }
+    return true
+}
+
+pub fn leave_raw_mode()
+{
+    if (vlibtui::term::tui_raw_active == 1 and vlibtui::term::tui_saved_termios != 0)
+    {
+        tcsetattr(0, 0, vlibtui::term::tui_saved_termios)
+        free(vlibtui::term::tui_saved_termios)
+        vlibtui::term::tui_saved_termios = 0
+        vlibtui::term::tui_raw_active = 0
+    }
+}
+
+pub fn terminal_size(): TerminalSize
+{
+    let data = malloc(8)
+    if (data == 0) return TerminalSize{ rows: 24, cols: 80 }
+    let words: ptr:[u16] = data
+    let mut rows = 24
+    let mut cols = 80
+    if (ioctl(1, 21523, data) == 0 and words[0] > 0 and words[1] > 0)
+    {
+        rows = words[0]
+        cols = words[1]
+    }
+    free(data)
+    return TerminalSize{ rows: rows, cols: cols }
+}

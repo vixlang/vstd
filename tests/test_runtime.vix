@@ -8,9 +8,9 @@ fn main(): i32
     if (!vstd::str::ends_with("standard", "dard")) return 2
     if (!vstd::str::contains("standard", "and")) return 3
 
-    let path = "/tmp/vstd_runtime_test.txt"
-    if (!vstd::io::write_file(path, "vstd-ok")) return 4
-    match vstd::io::read_file(path)
+    let wrote = vstd::io::write_file("/tmp/vstd_runtime_test.txt", "vstd-ok")
+    if (!wrote) return 4
+    match vstd::io::read_file("/tmp/vstd_runtime_test.txt")
     {
         Ok(value) ->
         {

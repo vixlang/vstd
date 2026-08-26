@@ -1,0 +1,110 @@
+mod vstd
+mod vlibcurl
+
+extern "C" { fn printf(format: ptr, ...): i32 }
+
+fn main(): i32
+{
+    let mut enabled = false
+    match vstd::os::env("RUN_DEEPSEEK_INTEGRATION")
+    {
+        Ok(value) -> { match value { VStr(flag) -> { enabled = flag == "1" } _ -> {} } }
+        _ -> {}
+    }
+    if (enabled == false)
+    {
+        printf("SKIP DeepSeek integration (set RUN_DEEPSEEK_INTEGRATION=1)\n")
+        return 0
+    }
+
+    let mut token = ""
+    match vstd::os::env("DEEPSEEK_API_KEY")
+    {
+        Ok(value) -> { match value { VStr(key) -> { token = key } _ -> {} } }
+        _ ->
+        {
+            printf("SKIP DeepSeek integration (DEEPSEEK_API_KEY is not set)\n")
+            return 0
+        }
+    }
+    if (token.length == 0)
+    {
+        printf("SKIP DeepSeek integration (DEEPSEEK_API_KEY is empty)\n")
+        return 0
+    }
+
+    let mut base_url = "https://api.deepseek.com"
+    match vstd::os::env("DEEPSEEK_BASE_URL")
+    {
+        Ok(value) -> { match value { VStr(url) -> { base_url = url } _ -> {} } }
+        _ -> {}
+    }
+    let mut model = "deepseek-chat"
+    match vstd::os::env("DEEPSEEK_MODEL")
+    {
+        Ok(value) -> { match value { VStr(name) -> { model = name } _ -> {} } }
+        _ -> {}
+    }
+
+    let body = "{\"model\":" + vstd::json::stringify(VStr(clone(model))) + ",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with the single word pong\"}]}"
+    match vlibcurl::chat_completion(clone(base_url), "/chat/completions", clone(body), clone(token), "/tmp/vstd_deepseek_integration.json")
+    {
+        Ok(value) ->
+        {
+            match value
+            {
+                VStr(response) ->
+                {
+                    match vstd::json::parse(clone(response))
+                    {
+                        Ok(root) ->
+                        {
+                            match vstd::json::get(clone(root), "choices")
+                            {
+                                Ok(choices) ->
+                                {
+                                    match vstd::json::at(clone(choices), 0)
+                                    {
+                                        Ok(choice) ->
+                                        {
+                                            match vstd::json::get(clone(choice), "message")
+                                            {
+                                                Ok(message) ->
+                                                {
+                                                    match vstd::json::get(clone(message), "content")
+                                                    {
+                                                        Ok(content_value) ->
+                                                        {
+                                                            match content_value
+                                                            {
+                                                                VStr(content) ->
+                                                                {
+                                                                    if (content.length == 0) return 6
+                                                                    printf("PASS DeepSeek integration (content bytes=%d)\n", content.length)
+                                                                    return 0
+                                                                }
+                                                                _ -> { return 5 }
+                                                            }
+                                                        }
+                                                        _ -> { return 4 }
+                                                    }
+                                                }
+                                                _ -> { return 3 }
+                                            }
+                                        }
+                                        _ -> { return 2 }
+                                    }
+                                }
+                                _ -> { return 1 }
+                            }
+                        }
+                        Err(message) -> { printf("FAIL response JSON: %s\n", message) return 7 }
+                    }
+                }
+                _ -> { return 8 }
+            }
+        }
+        Err(message) -> { printf("FAIL DeepSeek request: %s\n", message) return 9 }
+    }
+    return 10
+}

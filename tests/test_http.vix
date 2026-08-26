@@ -12,7 +12,7 @@ fn main(): i32
             {
                 VStr(response) ->
                 {
-                    if (!vstd::str::contains(response, " 200 "))
+                    if (!vstd::str::contains(clone(response), " 200 "))
                     {
                         printf("unexpected response: %s\n", response[0 .. 80])
                         return 1
