@@ -1,0 +1,18 @@
+pub type Widget = struct
+{
+    kind: i32,
+    text: string,
+    children: [Widget]
+}
+
+pub fn window(title: string): Widget { return Widget{ kind: 0, text: title, children: [] } }
+pub fn column(): Widget { return Widget{ kind: 1, text: "", children: [] } }
+pub fn row(): Widget { return Widget{ kind: 2, text: "", children: [] } }
+pub fn label(text: string): Widget { return Widget{ kind: 3, text: text, children: [] } }
+pub fn button(text: string): Widget { return Widget{ kind: 4, text: text, children: [] } }
+pub fn input(placeholder: string): Widget { return Widget{ kind: 5, text: placeholder, children: [] } }
+
+pub fn add(parent: &mut Widget, child: Widget)
+{
+    parent.children.push(child)
+}

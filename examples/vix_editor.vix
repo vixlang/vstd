@@ -1,0 +1,131 @@
+mod vstd
+mod tinyui_gtk
+
+extern "C"
+{
+    fn strdup(value: ptr): string
+}
+
+type FileState = Loaded(string) | Missing(string) | Untitled
+type EditorAction = Save | Close
+
+let mut editor_view: ptr = 0
+let mut editor_path: string = "untitled.vix"
+let mut editor_status: ptr = 0
+
+macro $connect(call: expr)
+{
+    $call
+}
+
+fn default_source(): string
+{
+    return "fn main(): i32\n{\n    return 0\n}\n"
+}
+
+fn argument_path(argc: i32, argv: ptr): string
+{
+    let args: ptr:[ptr] = argv
+    return if (argc > 1) strdup(args[1]) else "untitled.vix"
+}
+
+fn load(path: string): FileState
+{
+    return match vstd::io::read_file(path) {
+        Ok(value) -> match value {
+            VStr(source) -> Loaded(source)
+            _ -> Missing(path)
+        }
+        Err(_) -> if (path == "untitled.vix") Untitled else Missing(path)
+    }
+}
+
+fn describe(state: FileState): string
+{
+    return match state {
+        Loaded(path) -> "Opened " + path
+        Missing(path) -> "New file: " + path
+        Untitled -> "Untitled Vix source"
+    }
+}
+
+fn source_for(state: FileState): string
+{
+    return match state {
+        Loaded(source) -> source
+        Missing(_) -> default_source()
+        Untitled -> default_source()
+    }
+}
+
+fn set_status(message: string)
+{
+    tinyui_gtk::app::set_label(editor_status, message)
+}
+
+fn dispatch(action: EditorAction)
+{
+    match action {
+        Save ->
+        {
+            let source = editor_view
+                |> tinyui_gtk::app::buffer_text
+            let saved = vstd::io::write_file(editor_path, source)
+            set_status(if (saved) "Saved " + editor_path else "Could not save " + editor_path)
+        }
+        Close -> tinyui_gtk::app::quit()
+    }
+}
+
+fn save_file(_widget: ptr, _data: ptr) { dispatch(Save) }
+fn close_editor(_widget: ptr, _data: ptr) { dispatch(Close) }
+
+fn main(argc: i32, argv: ptr): i32
+{
+    tinyui_gtk::app::init()
+    editor_path = argument_path(argc, argv)
+    let state = editor_path
+        |> load
+    let app = tinyui_gtk::app::new_app("Vedior - " + editor_path, 1120, 720)
+    let layout = tinyui_gtk::app::column(0)
+    let topbar = tinyui_gtk::app::row(0)
+    let body = tinyui_gtk::app::row(0)
+    let sidebar = tinyui_gtk::app::column(4)
+    let editor = tinyui_gtk::app::column(0)
+    let activity = tinyui_gtk::app::column(4)
+    let explorer = tinyui_gtk::app::label("EXPLORER")
+    let project = tinyui_gtk::app::label("VEDIOR")
+    let file_item = tinyui_gtk::app::label("  >  " + editor_path)
+    let activity_title = tinyui_gtk::app::label("SOURCE CONTROL")
+    let menu = tinyui_gtk::app::label("File   Edit   Selection   View   Go   Run   Terminal   Help")
+    let save = tinyui_gtk::app::button("Save")
+    let close = tinyui_gtk::app::button("Close")
+    let tab = tinyui_gtk::app::label("  " + editor_path + "   x")
+    editor_status = tinyui_gtk::app::label("  Vix   |   " + describe(state))
+    editor_view = tinyui_gtk::app::text_view()
+    let viewport = tinyui_gtk::app::scroll(editor_view)
+    tinyui_gtk::app::set_text(editor_view, source_for(state))
+    tinyui_gtk::app::add(tinyui_gtk::app::window(&app), layout)
+    tinyui_gtk::app::append(layout, topbar, false)
+    tinyui_gtk::app::append(topbar, menu, true)
+    tinyui_gtk::app::append(topbar, save, false)
+    tinyui_gtk::app::append(topbar, close, false)
+    tinyui_gtk::app::append(layout, body, true)
+    tinyui_gtk::app::append(body, activity, false)
+    tinyui_gtk::app::append(activity, activity_title, false)
+    tinyui_gtk::app::append(body, sidebar, false)
+    tinyui_gtk::app::append(sidebar, explorer, false)
+    tinyui_gtk::app::append(sidebar, project, false)
+    tinyui_gtk::app::append(sidebar, file_item, false)
+    tinyui_gtk::app::append(body, editor, true)
+    tinyui_gtk::app::append(editor, tab, false)
+    tinyui_gtk::app::append(editor, viewport, true)
+    tinyui_gtk::app::append(layout, editor_status, false)
+    $connect(tinyui_gtk::app::on_clicked(save, save_file))
+    $connect(tinyui_gtk::app::on_clicked(close, close_editor))
+    tinyui_gtk::app::on_destroy(tinyui_gtk::app::window(&app), close_editor)
+    tinyui_gtk::app::show(&app)
+    tinyui_gtk::app::focus(editor_view)
+    tinyui_gtk::app::run()
+    return 0
+}

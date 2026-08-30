@@ -1,0 +1,23 @@
+mod tinyui_gtk
+
+fn close_window(_widget: ptr, _data: ptr)
+{
+    tinyui_gtk::app::quit()
+}
+
+fn main(): i32
+{
+    tinyui_gtk::app::init()
+    let app = tinyui_gtk::app::new_app("TinyUI GTK", 480, 240)
+    let layout = tinyui_gtk::app::column(8)
+    let title = tinyui_gtk::app::label("TinyUI GTK binding")
+    let action = tinyui_gtk::app::button("Close")
+    tinyui_gtk::app::add(tinyui_gtk::app::window(&app), layout)
+    tinyui_gtk::app::append(layout, title, false)
+    tinyui_gtk::app::append(layout, action, false)
+    tinyui_gtk::app::on_clicked(action, close_window)
+    tinyui_gtk::app::on_destroy(tinyui_gtk::app::window(&app), close_window)
+    tinyui_gtk::app::show(&app)
+    tinyui_gtk::app::run()
+    return 0
+}

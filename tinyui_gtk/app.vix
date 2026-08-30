@@ -1,0 +1,144 @@
+extern "C"
+{
+    fn gtk_init(argc: ptr, argv: ptr): void
+    fn gtk_main(): void
+    fn gtk_main_quit(): void
+    fn gtk_window_new(kind: i32): ptr
+    fn gtk_window_set_title(window: ptr, title: ptr): void
+    fn gtk_window_set_default_size(window: ptr, width: i32, height: i32): void
+    fn gtk_window_set_resizable(window: ptr, resizable: i32): void
+    fn gtk_container_add(container: ptr, child: ptr): void
+    fn gtk_box_new(orientation: i32, spacing: i32): ptr
+    fn gtk_box_pack_start(box: ptr, child: ptr, expand: i32, fill: i32, padding: i32): void
+    fn gtk_label_new(text: ptr): ptr
+    fn gtk_label_set_text(label: ptr, text: ptr): void
+    fn gtk_button_new_with_label(text: ptr): ptr
+    fn gtk_entry_new(): ptr
+    fn gtk_entry_set_placeholder_text(entry: ptr, text: ptr): void
+    fn gtk_entry_get_text(entry: ptr): ptr
+    fn gtk_text_view_new(): ptr
+    fn gtk_text_view_get_buffer(view: ptr): ptr
+    fn gtk_text_view_set_monospace(view: ptr, enabled: i32): void
+    fn gtk_text_buffer_set_text(buffer: ptr, text: ptr, length: i32): void
+    fn gtk_text_buffer_get_bounds(buffer: ptr, start: ptr, end: ptr): void
+    fn gtk_text_buffer_get_text(buffer: ptr, start: ptr, end: ptr, include_hidden: i32): ptr
+    fn gtk_scrolled_window_new(hadjustment: ptr, vadjustment: ptr): ptr
+    fn gtk_scrolled_window_set_policy(window: ptr, horizontal: i32, vertical: i32): void
+    fn gtk_widget_show_all(widget: ptr): void
+    fn gtk_widget_set_hexpand(widget: ptr, expand: i32): void
+    fn gtk_widget_set_vexpand(widget: ptr, expand: i32): void
+    fn gtk_widget_grab_focus(widget: ptr): void
+    fn gtk_widget_destroy(widget: ptr): void
+    fn g_signal_connect_data(instance: ptr, signal: ptr, callback: fn(ptr, ptr): void, data: ptr, destroy: ptr, flags: i32): u64
+    fn strdup(value: ptr): string
+    fn malloc(size: usize): ptr
+    fn free(value: ptr): void
+    fn g_free(value: ptr): void
+}
+
+pub type App = struct { window: ptr }
+
+pub fn init(): void
+{
+    gtk_init(nil, nil)
+}
+
+pub fn new_app(title: string, width: i32, height: i32): App
+{
+    let window = gtk_window_new(0)
+    gtk_window_set_title(window, title)
+    gtk_window_set_default_size(window, width, height)
+    return App{ window: window }
+}
+
+pub fn window(app: &App): ptr { return app.window }
+
+pub fn column(spacing: i32): ptr
+{
+    return gtk_box_new(1, spacing)
+}
+
+pub fn row(spacing: i32): ptr
+{
+    return gtk_box_new(0, spacing)
+}
+
+pub fn label(text: string): ptr { return gtk_label_new(text) }
+pub fn set_label(widget: ptr, text: string) { gtk_label_set_text(widget, text) }
+
+pub fn button(text: string): ptr { return gtk_button_new_with_label(text) }
+
+pub fn input(placeholder: string): ptr
+{
+    let entry = gtk_entry_new()
+    gtk_entry_set_placeholder_text(entry, placeholder)
+    return entry
+}
+
+pub fn text_view(): ptr
+{
+    let view = gtk_text_view_new()
+    gtk_text_view_set_monospace(view, 1)
+    gtk_widget_set_hexpand(view, 1)
+    gtk_widget_set_vexpand(view, 1)
+    return view
+}
+
+pub fn scroll(child: ptr): ptr
+{
+    let area = gtk_scrolled_window_new(nil, nil)
+    gtk_scrolled_window_set_policy(area, 1, 1)
+    gtk_container_add(area, child)
+    return area
+}
+
+pub fn set_text(view: ptr, value: string)
+{
+    gtk_text_buffer_set_text(gtk_text_view_get_buffer(view), value, value.length)
+}
+
+pub fn buffer_text(view: ptr): string
+{
+    let start = malloc(80)
+    let end = malloc(80)
+    let buffer = gtk_text_view_get_buffer(view)
+    gtk_text_buffer_get_bounds(buffer, start, end)
+    let raw = gtk_text_buffer_get_text(buffer, start, end, 1)
+    let value = strdup(raw)
+    g_free(raw)
+    free(start)
+    free(end)
+    return value
+}
+
+pub fn add(parent: ptr, child: ptr)
+{
+    gtk_container_add(parent, child)
+}
+
+pub fn append(box: ptr, child: ptr, expand: bool)
+{
+    let flag = if (expand) 1 else 0
+    gtk_box_pack_start(box, child, flag, flag, 0)
+}
+
+pub fn on_clicked(button: ptr, callback: fn(ptr, ptr): void): u64
+{
+    return g_signal_connect_data(button, "clicked", callback, nil, nil, 0)
+}
+
+pub fn on_destroy(window: ptr, callback: fn(ptr, ptr): void): u64
+{
+    return g_signal_connect_data(window, "destroy", callback, nil, nil, 0)
+}
+
+pub fn text(entry: ptr): string
+{
+    return strdup(gtk_entry_get_text(entry))
+}
+
+pub fn show(app: &App) { gtk_widget_show_all(app.window) }
+pub fn focus(widget: ptr) { gtk_widget_grab_focus(widget) }
+pub fn run() { gtk_main() }
+pub fn quit() { gtk_main_quit() }
+pub fn destroy(widget: ptr) { gtk_widget_destroy(widget) }

@@ -1,0 +1,12 @@
+mod tinyui
+
+fn main(): i32
+{
+    let mut page = tinyui::widget::column()
+    tinyui::widget::add(&mut page, tinyui::widget::label("Hello"))
+    tinyui::widget::add(&mut page, tinyui::widget::button("Run"))
+    if (page.children.length != 2) return 1
+    if (page.children[0].text != "Hello") return 2
+    if (page.children[1].text != "Run") return 3
+    return 0
+}
